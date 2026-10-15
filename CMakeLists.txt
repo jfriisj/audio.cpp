@@ -2974,6 +2974,7 @@ add_executable(audiocpp_server
     app/server/model_memory.cpp
     app/server/multipart.cpp
     app/server/server_protocol.cpp
+    app/server/generation_jobs.cpp
     app/server/server_ui.cpp
     app/server/runtime.cpp
     app/server/parallel_runtime.cpp
