@@ -73,6 +73,8 @@ const char * status_text(int status) noexcept {
     switch (status) {
     case 200:
         return "OK";
+    case 202:
+        return "Accepted";
     case 204:
         return "No Content";
     case 400:
@@ -83,6 +85,10 @@ const char * status_text(int status) noexcept {
         return "Not Found";
     case 405:
         return "Method Not Allowed";
+    case 409:
+        return "Conflict";
+    case 429:
+        return "Too Many Requests";
     case 413:
         return "Payload Too Large";
     case 500:

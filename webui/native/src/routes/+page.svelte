@@ -17,6 +17,7 @@
     models,
     pathStatus,
     runTask,
+    createGenerationJob,
     setModelsRoot,
     speech,
     stopModelInstall,
@@ -40,6 +41,7 @@
   import Arena from './Arena.svelte';
   import Configuration from './Configuration.svelte';
   import ModelLibrary from './ModelLibrary.svelte';
+  import MusicLibrary from '$lib/MusicLibrary.svelte';
   import VoiceLibrary from './VoiceLibrary.svelte';
   import { loadUiConfiguration, uiConfiguration, uiConfigurationError } from '$lib/configuration';
   import type {
@@ -58,7 +60,7 @@
   } from '$lib/voices';
   import '../app.css';
 
-  let tab: 'studio' | 'arena' | 'models' | 'logs' | 'configuration' | 'voices' = 'studio';
+  let tab: 'studio' | 'arena' | 'models' | 'logs' | 'configuration' | 'voices' | 'music' = 'studio';
   let voiceLibrary: VoiceLibrary | null = null;
   let arenaComponent: { runArena: () => Promise<void> } | null = null;
   let selectedId = catalog[0]?.id || '';
@@ -2037,7 +2039,10 @@
           throw new StatusWarning('LiveAvatar requires a reference image.');
         }
       }
-      await ensureLoaded();
+      // Text/lyrics-only generation loads its model inside the queue worker.
+      const queuedMusic = server?.generation_jobs === true && selected.task === 'gen' && !usesPanelRequest &&
+        !needsSource && !sourceFile && !voiceFile && !videoFile;
+      if (!queuedMusic) await ensureLoaded();
       const resident = loadedModels.find((model) => model.id === selected.id);
       const submittedSettings = {
         schema_version: 1,
@@ -2174,6 +2179,27 @@
           request.reference_text = referenceText;
         }
         const body = { model: selected.id, request };
+        if (queuedMusic) {
+          const job = await createGenerationJob({
+            ...body,
+            ...(server?.ui_management ? {
+              model_load: {
+                id: selected.id,
+                path: modelPath,
+                family: selected.family,
+                task: selected.task,
+                mode: selected.mode || 'offline',
+                load_options: { ...(selected.load_options || {}), ...importedLoadOptions },
+                session_options: mergedSessionOptions(selected)
+              }
+            } : {})
+          });
+          outputCommitted = true;
+          status = 'Generation ' + job.id.slice(0, 8) + ' added to queue.';
+          log(status);
+          tab = 'music';
+          return;
+        }
         submittedRequests.push({ endpoint: '/v1/tasks/run', body: JSON.parse(JSON.stringify(body)) });
         const result = await runTask(body, aborter.signal);
         nextText = typeof result.text === 'string' ? result.text : '';
@@ -2611,6 +2637,9 @@
   <nav aria-label={tr('nav.primary')}>
     <button class:active={tab === 'studio'} on:click={openStudioPage}>{tr('nav.studio')}</button>
     <button class:active={tab === 'arena'} on:click={() => openPage('arena')}>{tr('nav.arena')}</button>
+    {#if server?.generation_jobs}
+      <button class:active={tab === 'music'} on:click={() => openPage('music')}>Music Library</button>
+    {/if}
     <button class:active={tab === 'voices'} disabled={running || restoringHistory || Boolean(recorder) || liveRecording}
       on:click={() => openPage('voices')}>Voices</button>
     {#if server?.ui_management !== false}
@@ -3163,6 +3192,8 @@
         {#if outputJson}<pre>{outputJson}</pre>{/if}
       </section>
     </div>
+  {:else if tab === 'music'}
+    <MusicLibrary />
   {:else if tab === 'arena'}
     <Arena
       bind:this={arenaComponent}

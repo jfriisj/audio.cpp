@@ -127,6 +127,9 @@ struct RequestDispatcher {
       else if (request.method == "POST" &&
                request.path == "/v1/audio/transcriptions/live") {
         response = state.handle_transcription_live(request);
+      } else if (request.path == "/v1/tasks/jobs" ||
+                 request.path.rfind("/v1/tasks/jobs/", 0) == 0) {
+        response = state.handle_generation_jobs(request);
       } else if (request.method == "POST" && request.path == "/v1/tasks/run") {
         response = state.handle_generic_run(request.body);
       } else if (request.method == "POST" &&

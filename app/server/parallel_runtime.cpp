@@ -130,12 +130,28 @@ ParallelServerState::ParallelServerState(
 #endif
     register_static_server_frontends(frontends_);
     load_models();
+    if (config_.ui_enabled && !config_.generation_dir.empty()) {
+        generation_jobs_ = std::make_unique<GenerationJobs>(
+        request_base_ / config_.generation_dir,
+        [this](const std::string &body) {
+            const auto input = engine::io::json::parse(body);
+            if (const auto *model_load = input.find("model_load")) {
+                if (!config_.ui_management) {
+                    return error_response(403, "model loading is disabled", "forbidden");
+                }
+                const auto loaded = handle_model_load(engine::io::json::stringify(*model_load));
+                if (loaded.status != 200) return loaded;
+            }
+            return handle_generic_run(body);
+        });
+    }
     if (config_.idle_unload_ms > 0) {
         idle_unload_thread_ = std::thread(&ParallelServerState::idle_unload_loop, this);
     }
 }
 
 ParallelServerState::~ParallelServerState() {
+    generation_jobs_.reset();
     idle_unload_shutdown_.store(true, std::memory_order_relaxed);
     if (idle_unload_thread_.joinable()) {
         idle_unload_thread_.join();
@@ -189,7 +205,8 @@ HttpResponse ParallelServerState::handle_health() const {
         "{\"status\":\"ok\",\"backend\":\"" + std::string(backend_name(config_.backend)) +
         "\",\"models\":" + std::to_string(model_count) +
         ",\"ui\":" + (config_.ui_enabled ? "true" : "false") +
-        ",\"ui_management\":" + (config_.ui_management ? "true" : "false") + "}");
+        ",\"ui_management\":" + (config_.ui_management ? "true" : "false") +
+        ",\"generation_jobs\":" + (generation_jobs_ ? "true" : "false") + "}");
 }
 
 void ParallelServerState::load_models() {
@@ -2091,6 +2108,12 @@ engine::runtime::TaskRequest parallel_drop_unsupported_language_option(
         request.options.erase(it);
     }
     return request;
+}
+
+HttpResponse ParallelServerState::handle_generation_jobs(const HttpRequest &request) {
+    if (!config_.ui_enabled) return error_response(403, "WebUI is disabled", "forbidden");
+    if (!generation_jobs_) return error_response(404, "generation jobs are disabled", "not_found");
+    return generation_jobs_->handle(request);
 }
 
 HttpResponse ParallelServerState::handle_generic_run(const std::string & body_text) {

@@ -1,0 +1,54 @@
+name: Async Music WebUI
+
+on:
+  pull_request:
+    paths:
+      - "webui/native/**"
+      - ".devops/cuda.Dockerfile"
+      - "compose.yaml"
+      - ".env.example"
+      - ".github/workflows/async-music-webui.yml"
+  push:
+    branches: [main]
+    paths:
+      - "webui/native/**"
+      - "compose.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  webui:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webui/native/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: webui/native
+      - name: Typecheck Svelte
+        run: npm run check
+        working-directory: webui/native
+      - name: Build embedded HTML
+        run: npm run build
+        working-directory: webui/native
+
+  docker-webui:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build WebUI in Docker with repository-relative imports
+        run: docker build --file .devops/cuda.Dockerfile --target webui --tag audiocpp-webui-ci .
+
+  compose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate local and Cloudflare Compose profiles
+        run: |
+          docker compose config --quiet
+          CLOUDFLARE_TUNNEL_TOKEN=ci-placeholder docker compose --profile remote config --quiet
