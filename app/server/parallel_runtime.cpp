@@ -130,7 +130,8 @@ ParallelServerState::ParallelServerState(
 #endif
     register_static_server_frontends(frontends_);
     load_models();
-    generation_jobs_ = std::make_unique<GenerationJobs>(
+    if (config_.ui_enabled && !config_.generation_dir.empty()) {
+        generation_jobs_ = std::make_unique<GenerationJobs>(
         request_base_ / config_.generation_dir,
         [this](const std::string &body) {
             const auto input = engine::io::json::parse(body);
@@ -143,6 +144,7 @@ ParallelServerState::ParallelServerState(
             }
             return handle_generic_run(body);
         });
+    }
     if (config_.idle_unload_ms > 0) {
         idle_unload_thread_ = std::thread(&ParallelServerState::idle_unload_loop, this);
     }
@@ -203,7 +205,8 @@ HttpResponse ParallelServerState::handle_health() const {
         "{\"status\":\"ok\",\"backend\":\"" + std::string(backend_name(config_.backend)) +
         "\",\"models\":" + std::to_string(model_count) +
         ",\"ui\":" + (config_.ui_enabled ? "true" : "false") +
-        ",\"ui_management\":" + (config_.ui_management ? "true" : "false") + "}");
+        ",\"ui_management\":" + (config_.ui_management ? "true" : "false") +
+        ",\"generation_jobs\":" + (generation_jobs_ ? "true" : "false") + "}");
 }
 
 void ParallelServerState::load_models() {
@@ -2109,6 +2112,7 @@ engine::runtime::TaskRequest parallel_drop_unsupported_language_option(
 
 HttpResponse ParallelServerState::handle_generation_jobs(const HttpRequest &request) {
     if (!config_.ui_enabled) return error_response(403, "WebUI is disabled", "forbidden");
+    if (!generation_jobs_) return error_response(404, "generation jobs are disabled", "not_found");
     return generation_jobs_->handle(request);
 }
 
