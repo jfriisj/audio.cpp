@@ -8,6 +8,7 @@
 #include <chrono>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -46,6 +47,12 @@ void write_atomic(const std::filesystem::path &path, std::string_view data) {
         file.write(data.data(), static_cast<std::streamsize>(data.size()));
         if (!file) throw std::runtime_error("cannot write generation file: " + temporary);
     }
+#ifdef _WIN32
+    // std::filesystem::rename cannot replace an existing file on Windows.
+    // POSIX retains an atomic rename for readers and restart recovery.
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+#endif
     std::filesystem::rename(temporary, path);
 }
 
