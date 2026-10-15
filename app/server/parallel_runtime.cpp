@@ -130,12 +130,16 @@ ParallelServerState::ParallelServerState(
 #endif
     register_static_server_frontends(frontends_);
     load_models();
+    generation_jobs_ = std::make_unique<GenerationJobs>(
+        request_base_ / config_.generation_dir,
+        [this](const std::string &body) { return handle_generic_run(body); });
     if (config_.idle_unload_ms > 0) {
         idle_unload_thread_ = std::thread(&ParallelServerState::idle_unload_loop, this);
     }
 }
 
 ParallelServerState::~ParallelServerState() {
+    generation_jobs_.reset();
     idle_unload_shutdown_.store(true, std::memory_order_relaxed);
     if (idle_unload_thread_.joinable()) {
         idle_unload_thread_.join();
@@ -2091,6 +2095,11 @@ engine::runtime::TaskRequest parallel_drop_unsupported_language_option(
         request.options.erase(it);
     }
     return request;
+}
+
+HttpResponse ParallelServerState::handle_generation_jobs(const HttpRequest &request) {
+    if (!config_.ui_enabled) return error_response(403, "WebUI is disabled", "forbidden");
+    return generation_jobs_->handle(request);
 }
 
 HttpResponse ParallelServerState::handle_generic_run(const std::string & body_text) {
