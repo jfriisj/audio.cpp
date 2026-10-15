@@ -14,6 +14,14 @@ ARG GCC_VERSION=14
 ARG BASE_CUDA_DEV_CONTAINER=docker.io/nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
 ARG BASE_CUDA_RUN_CONTAINER=docker.io/nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}
 
+# Build the existing Svelte/TypeScript UI before CMake embeds dist/index.html.
+FROM node:22-bookworm-slim AS webui
+WORKDIR /ui
+COPY webui/native/package.json webui/native/package-lock.json ./
+RUN npm ci
+COPY webui/native/ ./
+RUN npm run build
+
 FROM ${BASE_CUDA_DEV_CONTAINER} AS build
 
 ARG GCC_VERSION=14
@@ -34,6 +42,7 @@ ENV CC=gcc-${GCC_VERSION} CXX=g++-${GCC_VERSION} CUDAHOSTCXX=g++-${GCC_VERSION}
 
 WORKDIR /app
 COPY . .
+COPY --from=webui /ui/dist/index.html /app/webui/native/dist/index.html
 
 RUN if [ "${CUDA_DOCKER_ARCH}" != "default" ]; then \
         ADDITIONAL_CMAKE_ARGS="-DCMAKE_CUDA_ARCHITECTURES=${CUDA_DOCKER_ARCH}"; \
@@ -109,7 +118,8 @@ COPY --from=build /app/full /app
 COPY model_specs/ /app/model_specs/
 COPY tools/model_manager_v2.py /app/tools/model_manager_v2.py
 
-RUN mkdir -p /app/models && chown ubuntu:ubuntu /app/models
+RUN mkdir -p /app/models /app/output/generations && \
+    chown -R ubuntu:ubuntu /app/models /app/output
 
 USER ubuntu
 
