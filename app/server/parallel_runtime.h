@@ -237,6 +237,7 @@ private:
         RequestLease request_lease = {});
     HttpResponse handle_transcription_live(const HttpRequest & request);
     HttpResponse handle_generic_run(const std::string & body_text);
+    HttpResponse handle_generation_jobs(const HttpRequest & request);
     HttpResponse handle_generic_batch(const std::string & body_text);
     HttpResponse handle_generic_stream(const std::string & body_text);
     HttpResponse handle_voices(const HttpRequest & request) const;
@@ -262,6 +263,7 @@ private:
     // Publish a bulk operation's per-model barriers as one short transaction.
     // Released before any waiting, unloading, or inference.
     std::mutex bulk_admission_mutex_;
+    std::unique_ptr<GenerationJobs> generation_jobs_;
     std::filesystem::path upload_root_;
     std::mutex upload_root_mutex_;
     std::filesystem::path repository_root_;
