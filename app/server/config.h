@@ -71,7 +71,7 @@ struct ServerConfig {
     std::string cors_origins = "";
     bool ui_enabled = true;
     bool ui_management = false;
-    std::filesystem::path generation_dir = "output/generations";
+    std::filesystem::path generation_dir; // empty disables the optional queue
     engine::core::BackendType backend = engine::core::BackendType::Cuda;
     int device = 0;
     int threads = 1;
