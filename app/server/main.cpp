@@ -250,6 +250,9 @@ int main(int argc, char ** argv) {
         if (const auto busy_timeout = arg_value(argc, argv, "--busy-timeout-ms")) {
             config.busy_timeout_ms = std::stoi(*busy_timeout);
         }
+        if (const auto generation_dir = arg_value(argc, argv, "--generation-dir")) {
+            config.generation_dir = *generation_dir;
+        }
         if (const auto max_loaded_models = arg_value(argc, argv, "--max-loaded-models")) {
             config.max_loaded_models = std::stoi(*max_loaded_models);
         }
