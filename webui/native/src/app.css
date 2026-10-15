@@ -350,3 +350,25 @@ footer { display: flex; justify-content: space-between; max-width: 1600px; margi
   .long-text-row, .voice-library, .reference-input-grid { grid-template-columns: 1fr; }.long-text-row > .toggle { margin-top: 12px; }
   footer { display: block; } footer span { display: block; margin-top: 5px; }
 }
+
+
+/* Server-side music generation history and queue. */
+.music-library { display: grid; gap: 1rem; }
+.music-library-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.music-library-heading h2 { margin: 0; }
+.music-job { padding: 1rem; border: 1px solid var(--border, #6d6d6d55); border-radius: 12px; display: grid; gap: .75rem; }
+.music-job-header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.music-job-header strong { display: block; overflow-wrap: anywhere; }
+.music-job-header small { display: block; opacity: .75; margin-top: .35rem; }
+.music-job-status { text-transform: capitalize; font-size: .85rem; opacity: .85; }
+.music-job-status[data-status="completed"] { color: #2aa66f; }
+.music-job-status[data-status="failed"],
+.music-job-status[data-status="interrupted"],
+.music-job-error { color: #d96363; }
+.music-job-audio { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.music-job-audio audio { min-width: min(100%, 280px); max-width: 100%; }
+.music-job-audio a { white-space: nowrap; }
+@media (max-width: 600px) {
+  .music-job-header { flex-direction: column; }
+  .music-job-audio { display: grid; }
+}
