@@ -37,6 +37,13 @@ jobs:
         run: npm run build
         working-directory: webui/native
 
+  docker-webui:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build WebUI in Docker with repository-relative imports
+        run: docker build --file .devops/cuda.Dockerfile --target webui --tag audiocpp-webui-ci .
+
   compose:
     runs-on: ubuntu-24.04
     steps:
