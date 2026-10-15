@@ -1,0 +1,35 @@
+name: Async Music WebUI
+
+on:
+  pull_request:
+    paths:
+      - "webui/native/**"
+      - ".devops/cuda.Dockerfile"
+      - ".github/workflows/async-music-webui.yml"
+  push:
+    branches: [main]
+    paths:
+      - "webui/native/**"
+
+permissions:
+  contents: read
+
+jobs:
+  webui:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: webui/native/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: webui/native
+      - name: Typecheck Svelte
+        run: npm run check
+        working-directory: webui/native
+      - name: Build embedded HTML
+        run: npm run build
+        working-directory: webui/native
