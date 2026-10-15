@@ -1,3 +1,14 @@
+# audio.cpp - repository-managed CUDA deployment
+#
+# Start locally:  docker compose up -d --build
+# Start remotely: docker compose --profile remote up -d --build
+# Cloudflare Tunnel hostname service: http://audiocpp:8080
+#
+# Data directories default to the repo root. To reuse directories outside
+# this repo, set AUDIOCPP_MODELS_PATH and AUDIOCPP_OUTPUT_PATH in .env.
+
+name: audiocpp
+
 services:
   audiocpp:
     container_name: audiocpp
@@ -6,15 +17,17 @@ services:
       dockerfile: .devops/cuda.Dockerfile
       target: full
       args:
-        CUDA_VERSION: 12.9.2
-        UBUNTU_VERSION: 24.04
+        CUDA_VERSION: "12.9.2"
+        UBUNTU_VERSION: "24.04"
         CUDA_DOCKER_ARCH: "86-real"
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30m
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${AUDIOCPP_PORT:-8080}:8080"
     volumes:
-      - ./models:/app/models
-      - ./output:/app/output
+      - "${AUDIOCPP_MODELS_PATH:-./models}:/app/models"
+      - "${AUDIOCPP_OUTPUT_PATH:-./output}:/app/output"
     command:
       - server
       - --ui
@@ -34,11 +47,18 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
     shm_size: "2gb"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
 
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: audiocpp-cloudflared
-    profiles: [remote]
+    profiles:
+      - remote
     restart: unless-stopped
     command:
       - tunnel
@@ -47,4 +67,5 @@ services:
       - --token
       - ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
-      - audiocpp
+      audiocpp:
+        condition: service_healthy
