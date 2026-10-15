@@ -3754,6 +3754,16 @@ if (ENGINE_BUILD_TESTS OR ENGINE_BUILD_EXTENDED_TESTS OR ENGINE_BUILD_MODEL_TEST
         # regression that reintroduces unbounded queuing fails instead of hanging CI.
         set_tests_properties(server_busy_guard_test PROPERTIES TIMEOUT 60)
 
+        add_executable(server_generation_jobs_test
+            tests/unittests/test_server_generation_jobs.cpp
+            app/server/generation_jobs.cpp
+            app/common/base64.cpp
+        )
+        target_include_directories(server_generation_jobs_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/app/server)
+        target_link_libraries(server_generation_jobs_test PRIVATE Threads::Threads engine_runtime ggml)
+        add_test(NAME server_generation_jobs_test COMMAND server_generation_jobs_test)
+        set_tests_properties(server_generation_jobs_test PROPERTIES TIMEOUT 30)
+
         add_executable(server_config_test
             tests/unittests/test_server_config.cpp
             app/server/config.cpp
