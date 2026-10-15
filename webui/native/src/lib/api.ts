@@ -1,4 +1,4 @@
-import type { LoadedModel, ServerHealth } from './types';
+import type { GenerationJob, LoadedModel, ServerHealth } from './types';
 
 function apiUrl(path: string): string {
   return new URL(path.replace(/^\//, ''), document.baseURI).toString();
@@ -6,12 +6,14 @@ function apiUrl(path: string): string {
 
 async function errorFrom(response: Response): Promise<Error> {
   let message = `${response.status} ${response.statusText}`;
-  try {
-    const body = await response.json();
-    message = body?.error?.message || body?.message || message;
-  } catch {
-    const text = await response.text();
-    if (text) message = text;
+  const text = await response.text();
+  if (text) {
+    try {
+      const body = JSON.parse(text);
+      message = body?.error?.message || body?.message || text;
+    } catch {
+      message = text;
+    }
   }
   return new Error(message);
 }
@@ -216,6 +218,22 @@ export async function runTask(body: Record<string, unknown>, signal?: AbortSigna
     method: 'POST',
     body: JSON.stringify(body)
   }, signal);
+}
+
+export async function createGenerationJob(body: Record<string, unknown>): Promise<GenerationJob> {
+  return jsonRequest<GenerationJob>('/v1/tasks/jobs', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+}
+
+export async function listGenerationJobs(): Promise<GenerationJob[]> {
+  const response = await jsonRequest<{ data: GenerationJob[] }>('/v1/tasks/jobs');
+  return response.data;
+}
+
+export async function retryGenerationJob(id: string): Promise<GenerationJob> {
+  return jsonRequest<GenerationJob>('/v1/tasks/jobs/' + encodeURIComponent(id) + '/retry', { method: 'POST' });
 }
 
 export class TaskStreamClosedError extends Error {
