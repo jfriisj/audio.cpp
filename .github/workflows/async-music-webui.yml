@@ -5,11 +5,14 @@ on:
     paths:
       - "webui/native/**"
       - ".devops/cuda.Dockerfile"
+      - "compose.yaml"
+      - ".env.example"
       - ".github/workflows/async-music-webui.yml"
   push:
     branches: [main]
     paths:
       - "webui/native/**"
+      - "compose.yaml"
 
 permissions:
   contents: read
@@ -33,3 +36,12 @@ jobs:
       - name: Build embedded HTML
         run: npm run build
         working-directory: webui/native
+
+  compose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate local and Cloudflare Compose profiles
+        run: |
+          docker compose config --quiet
+          CLOUDFLARE_TUNNEL_TOKEN=ci-placeholder docker compose --profile remote config --quiet
