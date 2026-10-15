@@ -131,7 +131,17 @@ ServerState::ServerState(
     load_models();
     generation_jobs_ = std::make_unique<GenerationJobs>(
         request_base_ / config_.generation_dir,
-        [this](const std::string &body) { return handle_generic_run(body); });
+        [this](const std::string &body) {
+            const auto input = engine::io::json::parse(body);
+            if (const auto *model_load = input.find("model_load")) {
+                if (!config_.ui_management) {
+                    return error_response(403, "model loading is disabled", "forbidden");
+                }
+                const auto loaded = handle_model_load(engine::io::json::stringify(*model_load));
+                if (loaded.status != 200) return loaded;
+            }
+            return handle_generic_run(body);
+        });
     if (config_.idle_unload_ms > 0) {
         idle_unload_thread_ = std::thread(&ServerState::idle_unload_loop, this);
     }
