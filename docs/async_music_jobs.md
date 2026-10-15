@@ -6,6 +6,12 @@ in the C++ server. No Python service, Redis, or separate web server is required.
 
 ## Docker (repository-owned setup)
 
+If you are migrating from a Compose file outside the repository, first run
+`docker compose down` **from the old Compose directory** to avoid the
+`audiocpp` container-name/port conflict. Move or copy your existing models
+and output files into the fork's `models/` and `output/` directories, or
+adjust the bind mounts in the checked-in Compose file.
+
 Run these commands from the root of this fork:
 
     mkdir -p models output/generations
@@ -41,6 +47,10 @@ loads/reconfigures the selected model **inside the worker**, then runs the
 existing model inference. Progress is shown as queued / running /
 completed. The browser polls every 5 seconds. It can be closed
 without cancelling the job.
+
+The job feature is opt-in for other deployments: start the server with
+`--generation-dir <directory>`. Without it, the original synchronous behavior
+is unchanged and the Music Library tab stays hidden.
 
 Only one queued generation is executed at a time. Existing synchronous
 generation endpoints remain unchanged for other tasks and clients.
