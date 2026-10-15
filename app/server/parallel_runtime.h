@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model_slots.h"
+#include "generation_jobs.h"
 #include "config.h"
 #include "frontend.h"
 #include "http.h"
