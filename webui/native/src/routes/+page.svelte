@@ -2040,7 +2040,7 @@
         }
       }
       // Text/lyrics-only generation loads its model inside the queue worker.
-      const queuedMusic = selected.task === 'gen' && !usesPanelRequest &&
+      const queuedMusic = server?.generation_jobs === true && selected.task === 'gen' && !usesPanelRequest &&
         !needsSource && !sourceFile && !voiceFile && !videoFile;
       if (!queuedMusic) await ensureLoaded();
       const resident = loadedModels.find((model) => model.id === selected.id);
@@ -2637,7 +2637,9 @@
   <nav aria-label={tr('nav.primary')}>
     <button class:active={tab === 'studio'} on:click={openStudioPage}>{tr('nav.studio')}</button>
     <button class:active={tab === 'arena'} on:click={() => openPage('arena')}>{tr('nav.arena')}</button>
-    <button class:active={tab === 'music'} on:click={() => openPage('music')}>Music Library</button>
+    {#if server?.generation_jobs}
+      <button class:active={tab === 'music'} on:click={() => openPage('music')}>Music Library</button>
+    {/if}
     <button class:active={tab === 'voices'} disabled={running || restoringHistory || Boolean(recorder) || liveRecording}
       on:click={() => openPage('voices')}>Voices</button>
     {#if server?.ui_management !== false}
