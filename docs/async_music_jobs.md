@@ -6,30 +6,51 @@ in the C++ server. No Python service, Redis, or separate web server is required.
 
 ## Docker (repository-owned setup)
 
-If you are migrating from a Compose file outside the repository, first run
-`docker compose down` **from the old Compose directory** to avoid the
-`audiocpp` container-name/port conflict. Move or copy your existing models
-and output files into the fork's `models/` and `output/` directories, or
-adjust the bind mounts in the checked-in Compose file.
+The canonical Docker Compose file is `compose.yaml` at the **root of this
+repository**. It replaces a separate Compose file outside the repo.
 
-Run these commands from the root of this fork:
+### Replace the old external Compose
+
+1. In the directory containing the **old** Compose, stop that stack with
+   `docker compose down`. Do **not** use `-v` (which can delete named volumes).
+2. Check out the `feature/async-music-jobs` branch of this fork (or `main`
+   once PR #1 has merged). Run all subsequent commands from the repository root.
+3. Copy `.env.example` to `.env` and optionally set
+   `AUDIOCPP_MODELS_PATH` and `AUDIOCPP_OUTPUT_PATH` to your old data
+   directories. Relative paths are resolved from the new `compose.yaml`.
+   For instance, if the fork is located in the old `./src` directory
+   with data alongside it, use:
+
+       AUDIOCPP_MODELS_PATH=../models
+       AUDIOCPP_OUTPUT_PATH=../output
+
+   When unset, data lives in `./models` and `./output` inside the fork.
+4. Check that the chosen data folders are writable by the container's
+   `ubuntu` user (usually UID 1000). Do not change ownership of other
+   shared directories indiscriminately.
+
+Start local-only deployment:
 
     mkdir -p models output/generations
-    sudo chown -R 1000:1000 models output
+    cp -n .env.example .env
+    docker compose config --quiet
     docker compose up -d --build
-
 
 Open http://localhost:8080 on the Docker host.
 
-For remote access, create a Cloudflare Tunnel and configure its public hostname
-(e.g. music.friis-jakobsen.dk) to point to **http://audiocpp:8080**.
-Protect it with Cloudflare Access before exposing the model manager. Copy
-.env.example to .env, set CLOUDFLARE_TUNNEL_TOKEN, and run:
+For Cloudflare, set `CLOUDFLARE_TUNNEL_TOKEN` in `.env`, then:
 
+    docker compose --profile remote config --quiet
     docker compose --profile remote up -d --build
 
+Configure the Cloudflare Tunnel hostname to reach **http://audiocpp:8080**
+inside Docker's Compose network, *not* localhost. Protect the hostname
+with Cloudflare Access because model management is enabled.
 
-The Cloudflare connector is optional. It is not needed for local use.
+The original CUDA options are kept (CUDA 12.9.2, Ubuntu 24.04,
+`86-real`, `full` target, `--max-loaded-models 1`).
+The HTTP port is published on localhost only; the Cloudflare connector is
+started only with the optional `remote` profile.
 
 The Compose build retains the upstream CUDA Dockerfile and its full
 target. The Dockerfile now builds Svelte with Node in an intermediate stage
