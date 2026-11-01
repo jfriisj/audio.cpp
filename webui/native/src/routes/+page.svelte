@@ -18,7 +18,6 @@
     models,
     pathStatus,
     runTask,
-    createGenerationJob,
     setModelsRoot,
     speech,
     stopModelInstall,
@@ -47,7 +46,8 @@
   import Apps from './Apps.svelte';
   import Configuration from './Configuration.svelte';
   import ModelLibrary from './ModelLibrary.svelte';
-  import MusicLibrary from '$lib/MusicLibrary.svelte';
+  import MusicLibrary from '$lib/music/MusicLibrary.svelte';
+  import { queueMusicGeneration } from '$lib/music/queue';
   import Library from './Library.svelte';
   import { loadUiConfiguration, uiConfiguration, uiConfigurationError } from '$lib/configuration';
   import type {
@@ -2231,19 +2231,12 @@
         }
         const body = { model: selected.id, request };
         if (queuedMusic) {
-          const job = await createGenerationJob({
-            ...body,
-            ...(server?.ui_management ? {
-              model_load: {
-                id: selected.id,
-                path: modelPath,
-                family: selected.family,
-                task: selected.task,
-                mode: selected.mode || 'offline',
-                load_options: { ...(selected.load_options || {}), ...importedLoadOptions },
-                session_options: mergedSessionOptions(selected)
-              }
-            } : {})
+          const job = await queueMusicGeneration(body, {
+            model: selected,
+            modelPath,
+            importedLoadOptions,
+            sessionOptions: mergedSessionOptions(selected),
+            includeModelLoad: Boolean(server?.ui_management)
           });
           outputCommitted = true;
           status = 'Generation ' + job.id.slice(0, 8) + ' added to queue.';
