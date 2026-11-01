@@ -77,10 +77,22 @@ The GGUF package is self-contained: the DiT lives under the `transformer` namesp
 Vocos vocoder under `vocos`, so no separate vocoder download or `f5_tts.vocos_path` option is
 needed (the option and safetensors fallbacks still work for the original HF checkpoints).
 Dialects: `UNK MSA SAU UAE ALG IRQ EGY MAR OMN TUN LEV SDN LBY`.
-Reference audio longer than ~10.9s is truncated (with a warning) — keep refs under that
-and make sure the transcript matches, otherwise the transcript tail leaks into the output.
+Reference audio longer than half the frame budget is truncated (with a warning): ~10.9s at the
+default 2048-frame budget on CUDA, ~5.1s on CPU. There the DiT graph pool is allocated up front
+(9 MiB per mel frame, hard-capped at 12 GiB for the batched-CFG graph and 6 GiB for the plain
+one), so a pass above 1024 frames cannot build a graph at all and the budget is clamped to 960
+frames. Keep refs under that and make sure the transcript matches, otherwise the transcript tail
+leaks into the output.
 
 ### Converting checkpoints to GGUF
+
+For LoRA support, reconvert the matching original checkpoint with the current
+converter; do not use the currently published F5-TTS GGUF packages as the base.
+PEFT DiT adapters can then be loaded with `--session-option f5_tts.lora=<path>`.
+Keep `adapter_config.json` beside the adapter weights. The optional
+`f5_tts.lora_scale` multiplies alpha/r and defaults to `1`. Adapted weights and
+DiT graph caches are session-owned; the Vocos vocoder is not adapted.
+See the [LoRA routing table](../lora.md).
 
 `tools/community_models/convert_f5_tts.py` wraps `audiocpp_gguf` and produces one self-contained GGUF per
 checkpoint (`transformer` + `vocos` namespaces) plus the standalone vocoder package:

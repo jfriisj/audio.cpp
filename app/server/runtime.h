@@ -11,6 +11,7 @@
 #endif
 
 #include "../streaming/streaming.h"
+#include "../recipe/recipe.h"
 
 #include "engine/framework/io/json.h"
 #include "engine/framework/runtime/model.h"
@@ -116,6 +117,7 @@ private:
     HttpResponse handle_path_status(const std::string & body_text) const;
     HttpResponse handle_ui_upload(const HttpRequest & request);
 #if defined(AUDIOCPP_HAS_NATIVE_MODEL_MANAGER)
+    HttpResponse handle_package_model_load(const std::string & body_text);
     HttpResponse handle_model_install(const std::string & body_text);
     HttpResponse handle_model_install_stop(const std::string & body_text);
     HttpResponse handle_model_clean_partial(const std::string & body_text);
@@ -205,6 +207,11 @@ private:
     HttpResponse handle_generation_jobs(const HttpRequest & request);
     HttpResponse handle_generic_batch(const std::string & body_text);
     HttpResponse handle_generic_stream(const std::string & body_text);
+    HttpResponse handle_recipe_run(const std::string & body_text);
+    TimedTaskResult run_recipe(
+        const engine::io::json::Value & body,
+        const minitts::app::RecipeEventSink & event_sink = {});
+    std::string recipes_json() const;
     HttpResponse handle_voices(const HttpRequest & request) const;
     HttpResponse handle_unload_models(const std::string & body_text);
     HttpResponse handle_unload_all_models();
@@ -219,6 +226,8 @@ private:
     std::filesystem::path request_base_;
     std::vector<std::unique_ptr<LoadedModel>> models_;
     std::unordered_map<std::string, size_t> model_index_;
+    // The server config's model definitions by id, kept for WebUI loads of those ids.
+    std::unordered_map<std::string, ServerModelConfig> configured_models_;
     mutable std::mutex models_mutex_;
     // Serializes framework loads while max_loaded_models or the memory guard
     // (min_free_memory_mb) is active, so two concurrent lazy loads cannot both
@@ -243,6 +252,7 @@ private:
     std::atomic<bool> idle_unload_shutdown_{false};
     std::thread idle_unload_thread_;
     ServerFrontendRegistry frontends_;
+    minitts::app::RecipeRegistry recipes_;
 };
 
 }  // namespace minitts::server

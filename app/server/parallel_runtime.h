@@ -144,6 +144,7 @@ private:
     HttpResponse handle_path_status(const std::string & body_text) const;
     HttpResponse handle_ui_upload(const HttpRequest & request);
 #if defined(AUDIOCPP_HAS_NATIVE_MODEL_MANAGER)
+    HttpResponse handle_package_model_load(const std::string & body_text);
     HttpResponse handle_model_install(const std::string & body_text);
     HttpResponse handle_model_install_stop(const std::string & body_text);
     HttpResponse handle_model_clean_partial(const std::string & body_text);
@@ -255,6 +256,8 @@ private:
     std::filesystem::path request_base_;
     std::vector<std::unique_ptr<LoadedModel>> models_;
     std::unordered_map<std::string, size_t> model_index_;
+    // The server config's model definitions by id, kept for WebUI loads of those ids.
+    std::unordered_map<std::string, ServerModelConfig> configured_models_;
     mutable std::mutex models_mutex_;
     // Serializes framework loads while max_loaded_models or the memory guard
     // (min_free_memory_mb) is active, so two concurrent lazy loads cannot both

@@ -84,14 +84,28 @@ build_speech_request(const Value &body, const SpeechRequestContext &context) {
                        "guidance_scale");
   add_option_from_json(request.options, body, "num_inference_steps",
                        "num_inference_steps");
-  if (const auto *value = body.find("instructions")) {
-    request.options["instruction"] = value->as_string();
+  const auto *instruct = body.find("instruct");
+  const auto *instructions = body.find("instructions");
+  if (instruct != nullptr && instructions != nullptr) {
+    throw engine::runtime::InvalidRequestError(
+        "instruct and instructions cannot both be set");
+  }
+  if (instruct != nullptr) {
+    request.options["instruct"] = instruct->as_string();
+  } else if (instructions != nullptr) {
+    request.options["instruction"] = instructions->as_string();
   }
 
   bool voice_field_is_preset = false;
   const RuntimeVoicePreset *preset = nullptr;
-  if (const auto *value = body.find("voice")) {
-    const auto it = context.voice_presets.find(value->as_string());
+  const auto *voice_value = body.find("voice");
+  if (voice_value != nullptr &&
+      (voice_value->is_null() ||
+       (voice_value->is_string() && voice_value->as_string().empty()))) {
+    voice_value = nullptr;
+  }
+  if (voice_value != nullptr) {
+    const auto it = context.voice_presets.find(voice_value->as_string());
     if (it != context.voice_presets.end()) {
       voice_field_is_preset = true;
       preset = &it->second;
@@ -121,14 +135,21 @@ build_speech_request(const Value &body, const SpeechRequestContext &context) {
         request.options.find("reference_text") == request.options.end()) {
       request.options["reference_text"] = *preset->reference_text;
     }
+    const bool has_instruct = request.options.count("instruct") != 0;
+    const bool has_instruction = request.options.count("instruction") != 0;
+    request = apply_default_request_options(preset->options, std::move(request));
+    if (has_instruct && !has_instruction) {
+      request.options.erase("instruction");
+    } else if (has_instruction && !has_instruct) {
+      request.options.erase("instruct");
+    }
   }
 
   const bool has_explicit_voice_ref = body.find("voice_ref") != nullptr;
-  if (const auto *value = body.find("voice");
-      value != nullptr && !voice_field_is_preset) {
+  if (voice_value != nullptr && !voice_field_is_preset) {
     bool voice_library_resolved = false;
     if (context.voice_dir.has_value() && !has_explicit_voice_ref) {
-      const std::string voice_name = value->as_string();
+      const std::string voice_name = voice_value->as_string();
       if (const auto wav =
               resolve_voice_library_wav(*context.voice_dir, voice_name)) {
         voice.speaker = engine::runtime::VoiceReference{};
@@ -148,7 +169,7 @@ build_speech_request(const Value &body, const SpeechRequestContext &context) {
       if (!voice.speaker.has_value()) {
         voice.speaker = engine::runtime::VoiceReference{};
       }
-      voice.speaker->cached_voice_id = value->as_string();
+      voice.speaker->cached_voice_id = voice_value->as_string();
       has_voice = true;
     }
   }
@@ -229,8 +250,18 @@ build_speech_request(const Value &body, const SpeechRequestContext &context) {
   if (has_voice) {
     request.voice = std::move(voice);
   }
-  return apply_default_request_options(context.default_options,
-                                       std::move(request));
+  const bool request_has_instruct =
+      request.options.find("instruct") != request.options.end();
+  const bool request_has_instruction =
+      request.options.find("instruction") != request.options.end();
+  auto merged = apply_default_request_options(context.default_options,
+                                              std::move(request));
+  if (request_has_instruct && !request_has_instruction) {
+    merged.options.erase("instruction");
+  } else if (request_has_instruction && !request_has_instruct) {
+    merged.options.erase("instruct");
+  }
+  return merged;
 }
 
 static bool is_missing_model_contract_error(std::string_view message) {
@@ -407,8 +438,18 @@ model_config_from_json(const Value &body,
   model.task = engine::io::json::optional_string(body, "task", model.task);
   model.mode = engine::io::json::optional_string(body, "mode", model.mode);
   model.lazy = lazy;
+  if (body.find("device") != nullptr) {
+    const int device = engine::io::json::optional_i32(body, "device", 0);
+    if (device < 0) {
+      throw engine::runtime::InvalidRequestError(
+          "device for model " + model.id + " must be >= 0");
+    }
+    model.device = device;
+  }
   if (const auto *value = body.find("model_spec_override")) {
-    model.model_spec_override = resolve_path(request_base, value->as_string());
+    const auto &selection = value->as_string();
+    model.model_spec_override = selection == "embedded"
+        ? std::filesystem::path(selection) : resolve_path(request_base, selection);
   }
   if (const auto *value = body.find("config")) {
     model.config_id = value->as_string();
