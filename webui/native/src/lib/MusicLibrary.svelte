@@ -112,7 +112,7 @@
         <span class="music-updated">Updated {new Date(lastUpdated).toLocaleTimeString()}</span>
       {/if}
       <button class="music-refresh" type="button" disabled={refreshing} on:click={() => void refresh()} aria-label="Refresh music generations">
-        <RefreshCw size={16} class:spinning={refreshing} aria-hidden="true" />
+        <span class:spinning={refreshing}><RefreshCw size={16} aria-hidden="true" /></span>
         {refreshing ? 'Refreshing' : 'Refresh'}
       </button>
     </div>
@@ -229,7 +229,7 @@
   .music-header-actions { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
   .music-updated { font-size: 11px; color: var(--muted); }
   .music-refresh, .music-job-failure button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; }
-  .spinning { animation: spin 1.2s linear infinite; }
+  .spinning { display: inline-flex; animation: spin 1.2s linear infinite; }
   .music-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
   .music-metric { display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-bg); }
   .music-metric span { color: var(--text-label); font-size: 12px; font-weight: 600; }
