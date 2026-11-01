@@ -2,6 +2,8 @@ import AuKPanel from './auk/AuKPanel.svelte';
 import Lfm2AudioPanel from './lfm2_audio/Lfm2AudioPanel.svelte';
 import LiveAvatarPanel from './liveavatar/LiveAvatarPanel.svelte';
 import Yue2Panel from './yue2/Yue2Panel.svelte';
+import Drama3Panel from './fish_drama3/Drama3Panel.svelte';
+import LatentSyncPanel from './latentsync/LatentSyncPanel.svelte';
 
 export interface GenericControlReplacements {
   packageButtons?: boolean;
@@ -12,9 +14,31 @@ export interface GenericControlReplacements {
   duration?: boolean;
   params?: boolean;
   advancedJson?: boolean;
+  voice?: boolean;
+  chunking?: boolean;
+  settingsImport?: boolean;
 }
 
 export const modelStudioPanels = {
+  latentsync: {
+    component: LatentSyncPanel,
+    requestMode: 'panel',
+    blocksRunWhileUploading: false,
+    replacesGenericControls: { text: true, language: true, duration: true, voice: true, chunking: true }
+  },
+  fish_drama3: {
+    component: Drama3Panel,
+    requestMode: 'panel',
+    blocksRunWhileUploading: false,
+    replacesGenericControls: {
+      text: true,
+      language: true,
+      voice: true,
+      chunking: true,
+      settingsImport: true,
+      advancedJson: true
+    }
+  },
   auk: {
     component: AuKPanel,
     requestMode: 'default',
@@ -41,6 +65,24 @@ export const modelStudioPanels = {
       text: false,
       genSource: false,
       language: false,
+      seed: false,
+      duration: false,
+      params: false,
+      advancedJson: false
+    }
+  },
+  lfm3_audio: {
+    component: Lfm2AudioPanel,
+    // Only speech-to-speech, as for lfm2_audio. Its S2S takes no language
+    // but auto, so the language field is hidden.
+    tasks: ['s2s'],
+    requestMode: 'panel',
+    blocksRunWhileUploading: false,
+    replacesGenericControls: {
+      packageButtons: false,
+      text: false,
+      genSource: false,
+      language: true,
       seed: false,
       duration: false,
       params: false,
