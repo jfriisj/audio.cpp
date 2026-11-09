@@ -248,7 +248,7 @@ public:
             throw runtime::CapacityError("Nemotron Transcribe prompt, audio and output budget exceed max_context");
         const auto frontend_ms = debug::elapsed_ms(start);
         auto stage = std::chrono::steady_clock::now();
-        const auto encoded = encoder_->encode(features);
+        const auto encoded = encoder_->encode(features, {}, word_times);
         const auto encoder_ms = debug::elapsed_ms(stage);
         stage = std::chrono::steady_clock::now();
         const auto generated = decoder_->generate(prompt.before_audio, encoded.audio_embeddings,
@@ -328,9 +328,11 @@ public:
                         "speaker_" + std::to_string(segment.speaker), 0.0F, ""});
             }
         }
-        report.emplace("wall_ms", json::Value::make_number(debug::elapsed_ms(start)));
+        const auto wall_ms = debug::elapsed_ms(start);
+        report.emplace("wall_ms", json::Value::make_number(wall_ms));
         result.custom_schema_output = runtime::CustomSchemaOutput{
             "nemotron_transcribe.result.v1", json::Value::make_object(std::move(report))};
+        engine::debug::timing_log_scalar("session.wall_ms", wall_ms);
         return result;
     }
 private:
