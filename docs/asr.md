@@ -13,6 +13,7 @@ For Qwen3-ASR adapter loading and merged GGUF export, see the [LoRA guide](lora.
 | Fun-ASR-Nano | `fun_asr_nano` | offline | [Fun-ASR-Nano](#fun-asr-nano) |
 | GigaAM v3 / Multilingual | `gigaam_asr` | offline | [GigaAM ASR](models/gigaam_asr.md) |
 | Granite Speech 5.0 TurboCTC | `granite5asr` | offline | [Granite Speech 5.0 TurboCTC](models/granite5asr.md) |
+| Haas Japanese ASR | `haas_asr` | offline, streaming | [Haas-ja-v1.0](models/haas.md) |
 | Higgs Audio STT | `higgs_audio_stt` | offline, streaming | [Higgs Audio STT](models/higgs_audio_stt.md) |
 | Hviske ASR | `hviske_asr` | offline | [Hviske ASR](#hviske-asr) |
 | Hviske v6 | `hviske_asr_v6` | offline | [Hviske v6](models/hviske_asr_v6.md) |
@@ -25,6 +26,8 @@ For Qwen3-ASR adapter loading and merged GGUF export, see the [LoRA guide](lora.
 | Nemotron ASR | `nemotron_asr` | offline, streaming | [Nemotron ASR](#nemotron-asr) |
 | Niagara ASR | `niagara_asr` | offline | [Niagara ASR](#niagara-asr) |
 | Parakeet-TDT | `parakeet_tdt` | offline, streaming | [Parakeet-TDT](#parakeet-tdt) |
+| Phonon-2 ASR | `phonon2_asr` | offline, streaming | [Phonon-2](models/phonon2_asr.md) |
+| Underdog Bark 3 | `underdog_bark3` | offline, streaming | [Underdog Bark 3](models/underdog_bark3.md) |
 | Qwen3 ASR | `qwen3_asr` | offline, streaming | [Qwen3 ASR](#qwen3-asr) |
 | SAMSONE | `samsone` | offline | [SAMSONE](models/samsone.md) |
 | SenseVoice-Small | `sense_asr` | offline, streaming | [SenseVoice-Small](#sensevoice-small) |
@@ -394,8 +397,8 @@ audiocpp_cli --task asr --mode streaming --family qwen3_asr --model models/Qwen3
 ## SenseVoice-Small
 
 SenseVoice-Small is a community multilingual ASR port with offline and buffered
-streaming sessions, language/event/emotion tags, and optional inverse text
-normalization. The recommended package is the standalone Q8 GGUF from
+streaming sessions, language/event/emotion tags, optional inverse text
+normalization, and optional word timestamps (`--words-out`). The recommended package is the standalone Q8 GGUF from
 FunAudioLLM.
 
 ```bash
@@ -414,7 +417,7 @@ audiocpp_cli --task asr --mode streaming --family sense_asr \
 ```
 
 See [SenseVoice-Small](models/sense_asr.md) for language tags,
-chunking, server usage, and validation notes.
+chunking, word timestamps, server usage, and validation notes.
 
 ## VibeVoice ASR
 
