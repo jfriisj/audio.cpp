@@ -307,7 +307,7 @@
   }
 
   function setDuration(value: number) {
-    const minimum = selected?.family === 'ace_step' ? -1 : 1;
+    const minimum = selected?.family === 'moss_soundeffect' ? 0.1 : selected?.family === 'ace_step' ? -1 : 1;
     duration = Math.max(minimum, Number.isFinite(value) ? value : minimum);
     if (selected?.family === 'minimax_h3') {
       advancedValues = { ...advancedValues, num_frames: miniMaxFramesForDuration(duration) };
@@ -559,8 +559,8 @@
   ) && selected?.task === 'tts';
   $: needsSource = ['asr', 'vc', 'svc', 's2s', 'sep', 'vad', 'diar', 'align', 'midi', 'turn', 'wake', 'cls'].includes(selected?.task) ||
     isFireRedAudioEdit || selected?.family === 'liveavatar' || selected?.family === 'latentsync' || selected?.family === 'soulx_flashhead' ||
-    (selected?.family === 'auk' && selected?.task === 'gen');
-  $: acceptsSource = needsSource || (selected?.task === 'gen' && !replacesGenericControls.genSource);
+    (['auk', 'mulacover'].includes(selected?.family) && selected?.task === 'gen');
+  $: acceptsSource = needsSource || (selected?.task === 'gen' && selected.family !== 'moss_soundeffect' && !replacesGenericControls.genSource);
   $: acceptsVideo = selected?.request_options?.includes('video') === true;
   $: needsVoice = (['clon', 'vc', 'svc'].includes(selected?.task) && selected?.family !== 'rvc') ||
     (selected?.task === 's2s' && selected?.family === 'personaplex') ||
@@ -1240,7 +1240,7 @@
       duration = 15;
       advancedValues = { ...advancedValues, num_frames: miniMaxFramesForDuration(duration), dit_acceleration: 'none' };
     } else if (selected?.task === 'gen') {
-      duration = selected.family === 'magenta_realtime_2' ? 10 : 30;
+      duration = ['magenta_realtime_2', 'moss_soundeffect'].includes(selected.family) ? 10 : 30;
     }
     if (selected?.family === 'yue2') {
       if (isConfiguredEntry(selected)) {
@@ -1256,7 +1256,7 @@
       text = '';
       lyrics = '';
       ensureYue2DefaultLyrics();
-    } else if (['liveavatar', 'moss_ttsd', 'sam_audio'].includes(selected?.family)) {
+    } else if (['liveavatar', 'moss_ttsd', 'sam_audio', 'moss_soundeffect', 'mulacover', 'mossformer2'].includes(selected?.family)) {
       text = selected.default_text || '';
     } else if (selected?.family === 'ming3_audio' && selected.task === 's2s') {
       text = '';
@@ -2141,9 +2141,9 @@
         if (!text.trim()) throw new StatusWarning('Enter text to generate.');
         const effectiveChunkBudget = Math.max(40, chunkBudget);
         if (selected.family === 'voxcpm2') options.text_chunk_size = effectiveChunkBudget;
-        // Ming anchors subsequent chunks to the first voice inside one request.
-        if (selected.family === 'ming3_tts' && longText) options.text_chunk_size = effectiveChunkBudget;
-        const chunks = longText && selected.task !== 'vdes' && !['moss_ttsd', 'ming3_tts'].includes(selected.family)
+        // Keep model-owned voice conditioning across chunks inside one request.
+        if (['ming3_tts', 'zonos2', 'zonos3'].includes(selected.family) && longText) options.text_chunk_size = effectiveChunkBudget;
+        const chunks = longText && selected.task !== 'vdes' && !['moss_ttsd', 'ming3_tts', 'zonos2', 'zonos3'].includes(selected.family)
           ? splitTtsChunks(text, effectiveChunkBudget)
           : [text];
         const audioChunks: Blob[] = [];
@@ -2212,7 +2212,7 @@
       } else {
         if (needsSource && !audio) throw new StatusWarning('Choose a source audio file.');
         const request: Record<string, unknown> = { options };
-        if (['gen', 's2s', 'align'].includes(selected.task) && text.trim() && !usesYue2Request && !usesFixedChatPrompt && !['apollo', 'universr', 'reuse', 'realtime_reuse', 'sidon'].includes(selected.family)) request.text = text;
+        if (['gen', 's2s', 'align'].includes(selected.task) && text.trim() && !usesYue2Request && !usesFixedChatPrompt && !['apollo', 'universr', 'reuse', 'realtime_reuse', 'sidon', 'mossformer2'].includes(selected.family)) request.text = text;
         if (['gen', 's2s', 'align'].includes(selected.task) && language.trim() && !usesYue2Request && !['apollo', 'universr', 'reuse', 'realtime_reuse', 'sidon'].includes(selected.family)) request.language = language;
         if (selected.task === 'gen') {
           if (usesYue2Request) {
@@ -2220,7 +2220,7 @@
           } else {
             const resolvedText = requestText();
             if (resolvedText) request.text = resolvedText;
-            if (lyrics.trim()) request.lyrics = lyrics;
+            if (lyrics.trim() && selected.family !== 'moss_soundeffect') request.lyrics = lyrics;
             if (!isFireRedAudioEdit && selected.family !== 'auk') {
               options.duration_sec = duration;
             }
@@ -2228,7 +2228,7 @@
           request.seed = resolvedSeed;
           if (supportsMaxTokens(selected)) request.max_tokens = maxTokens;
         } else if (selected.task === 's2s') {
-          if (!['apollo', 'reuse', 'realtime_reuse', 'sidon'].includes(selected.family)) request.seed = resolvedSeed;
+          if (!['apollo', 'reuse', 'realtime_reuse', 'sidon', 'mossformer2'].includes(selected.family)) request.seed = resolvedSeed;
           if (supportsMaxTokens(selected)) request.max_tokens = maxTokens;
         }
         if (audio) request.audio = audio;
@@ -2389,6 +2389,7 @@
       installJobs = { ...installJobs, ...incoming };
       let refreshInventory = false;
       for (const entry of catalog) {
+        let newlyCompleted = false;
         const completedJobs = entryInstallJobs(entry, installJobs).filter((job) => job.state === 'complete');
         for (const job of completedJobs) {
           const known = packageSizes[job.id];
@@ -2401,10 +2402,10 @@
               [job.id]: job.finished_at_ms
             };
             refreshInventory = true;
+            newlyCompleted = true;
           }
         }
-        const complete = completedJobs.length > 0;
-        if (complete && entry.id === selectedId) await inspectPath();
+        if (newlyCompleted && entry.id === selectedId) await inspectPath();
       }
       if (refreshInventory) {
         packageSizeState = 'idle';
@@ -2910,7 +2911,7 @@
               setSourceFile={(file: File | null) => sourceFile = file}
               startSourceRecording={() => startRecording('source')}
               stopSourceRecording={stopRecording} />
-        {:else if selected.task === 'gen'}
+        {:else if selected.task === 'gen' && selected.family !== 'moss_soundeffect'}
           <label for="lyrics">{tr('request.lyrics')} <span>{lyricsRequired ? tr('voice.required') : tr('request.optional')}</span></label>
           <textarea id="lyrics" rows="3" bind:value={lyrics} required={lyricsRequired}
             aria-required={lyricsRequired} placeholder="[Verse]…"></textarea>
@@ -2928,7 +2929,7 @@
         {/if}
 
         <div class="field-grid">
-          {#if ['tts', 'clon', 'asr', 'gen', 's2s', 'align', 'vdes'].includes(selected.task) && !replacesGenericControls.language && !['apollo', 'universr', 'moss_transcribe_diarize', 'builtin_audio_utils', 'sam_audio', 'samsone', 'gigaam_asr', 'maya1', 'owsm', 'owsm_ctc', 'index_echo', 'audio_flamingo', 'kugelaudio', 'reuse', 'realtime_reuse', 'haas_asr', 'phonon2_asr', 'underdog_bark3', 'sidon', 'hviske_asr_v6', 'voxtral_tts'].includes(selected.family)}
+          {#if ['tts', 'clon', 'asr', 'gen', 's2s', 'align', 'vdes'].includes(selected.task) && !replacesGenericControls.language && !['apollo', 'universr', 'moss_transcribe_diarize', 'builtin_audio_utils', 'sam_audio', 'samsone', 'gigaam_asr', 'maya1', 'owsm', 'owsm_ctc', 'index_echo', 'audio_flamingo', 'kugelaudio', 'reuse', 'realtime_reuse', 'haas_asr', 'phonon2_asr', 'underdog_bark3', 'sidon', 'hviske_asr_v6', 'voxtral_tts', 'zonos2', 'zonos3'].includes(selected.family)}
             <div>
               <label for="language">{tr('request.language')} {#if !asrLanguages[selected.family]}<span>{tr('request.autoLanguage')}</span>{/if}</label>
               {#if ['moss_ttsd', 'moss_voicegen'].includes(selected.family)}
@@ -2942,7 +2943,7 @@
               {/if}
             </div>
           {/if}
-          {#if ['tts', 'clon', 'gen', 's2s', 'vdes'].includes(selected.task) && !replacesGenericControls.seed && !['apollo', 'builtin_audio_utils', 'reuse', 'realtime_reuse', 'sidon'].includes(selected.family)}
+          {#if ['tts', 'clon', 'gen', 's2s', 'vdes'].includes(selected.task) && !replacesGenericControls.seed && !['apollo', 'builtin_audio_utils', 'reuse', 'realtime_reuse', 'sidon', 'mossformer2'].includes(selected.family)}
             <div>
               <label for="seed">{tr('request.seed')} <span>{tr('request.randomSeed')}</span></label>
               <input id="seed" type="number" min="-1" max="4294967295" step="1" bind:value={seed} />
@@ -2963,7 +2964,7 @@
           {#if selected.task === 'gen' && !replacesGenericControls.duration}
             <div>
               <label for="duration">{tr('request.duration')}{#if allowsAutoDuration} <span>{tr('request.autoDuration')}</span>{/if}</label>
-              <input id="duration" type="number" min={allowsAutoDuration ? -1 : 1} step="0.1" value={duration}
+              <input id="duration" type="number" min={selected.family === 'moss_soundeffect' ? 0.1 : allowsAutoDuration ? -1 : 1} max={selected.family === 'moss_soundeffect' ? 30 : undefined} step="0.1" value={duration}
                 on:input={(event) => setDuration(event.currentTarget.valueAsNumber)} />
               {#if selected.family === 'minimax_h3'}
                 <small>{tr('request.minimaxFrames', { frames: Number(advancedValues.num_frames || 0) })}</small>
