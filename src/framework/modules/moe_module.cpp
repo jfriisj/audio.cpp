@@ -1,4 +1,5 @@
 #include "engine/framework/modules/moe_module.h"
+#include "engine/framework/core/prepared_graph.h"
 
 #include <cmath>
 #include <limits>
@@ -23,7 +24,10 @@ MoeRouting MoeModule::build_routing(core::ModuleBuildContext & ctx, ggml_tensor 
     const auto tokens = input->ne[1];
     auto * logits = ggml_mul_mat(g, router, input);
     if (c.precision != GGML_PREC_DEFAULT) ggml_mul_mat_set_prec(logits, c.precision);
-    auto * scores = c.scoring == MoeScoring::Softmax ? ggml_soft_max(g, logits) : ggml_sigmoid(g, logits);
+    // SelectedSoftmax ranks the raw logits; its weights are the softmax of the selected logits below.
+    auto * scores = c.scoring == MoeScoring::Softmax ? ggml_soft_max(g, logits)
+        : c.scoring == MoeScoring::Sigmoid           ? ggml_sigmoid(g, logits)
+                                                     : logits;
     auto * selection = selection_bias ? ggml_add(g, scores, selection_bias) : scores;
     if (c.groups > 1) {
         const auto per_group = c.experts / c.groups;
@@ -41,6 +45,7 @@ MoeRouting MoeModule::build_routing(core::ModuleBuildContext & ctx, ggml_tensor 
     if (c.contiguous_ids && !ggml_is_contiguous(ids)) ids = ggml_cont(g, ids);
     auto * weights = ggml_get_rows(g, ggml_reshape_3d(g, scores, 1, c.experts, tokens), ids);
     weights = ggml_reshape_2d(g, weights, c.selected, tokens);
+    if (c.scoring == MoeScoring::SelectedSoftmax) weights = ggml_soft_max(g, weights);
     if (c.normalization != MoeNormalization::None) {
         auto * denominator = ggml_sum_rows(g, weights);
         if (c.normalization == MoeNormalization::Clamp)
@@ -54,7 +59,7 @@ MoeRouting MoeModule::build_routing(core::ModuleBuildContext & ctx, ggml_tensor 
 }
 
 ggml_tensor * MoeModule::build_experts(core::ModuleBuildContext & ctx, ggml_tensor * input,
-    ggml_tensor * ids, const MoeExpertWeights & weights) const {
+    ggml_tensor * ids, const MoeExpertWeights & weights, ggml_tensor ** first_op) const {
     auto * g = ctx.ggml;
     if (!weights.up || !weights.down || (experts_.activation == MoeActivation::SwiGlu && !weights.gate) ||
         weights.up->ne[0] < input->ne[0] || weights.down->ne[0] < weights.up->ne[1])
@@ -64,6 +69,7 @@ ggml_tensor * MoeModule::build_experts(core::ModuleBuildContext & ctx, ggml_tens
     ggml_tensor * activated;
     if (experts_.activation == MoeActivation::SwiGlu) {
         auto * gate = ggml_mul_mat_id(g, weights.gate, input, ids);
+        if (first_op) *first_op = gate;
         auto * up = ggml_mul_mat_id(g, weights.up, input, ids);
         if (experts_.round_projections) {
             gate = ggml_round_bf16(g, gate);
@@ -77,6 +83,7 @@ ggml_tensor * MoeModule::build_experts(core::ModuleBuildContext & ctx, ggml_tens
         }
     } else {
         auto * up = ggml_mul_mat_id(g, weights.up, input, ids);
+        if (first_op) *first_op = up;
         if (experts_.round_projections) up = ggml_round_bf16(g, up);
         activated = ggml_relu(g, up);
         if (experts_.round_activation) activated = ggml_round_bf16(g, activated);
@@ -100,7 +107,11 @@ ggml_tensor * MoeModule::combine(core::ModuleBuildContext & ctx, ggml_tensor * o
 ggml_tensor * MoeModule::build(core::ModuleBuildContext & ctx, ggml_tensor * input,
     const MoeRouting & routing, const MoeExpertWeights & weights, ggml_tensor * bank_ids) const {
     auto * rows = ggml_reshape_3d(ctx.ggml, input, input->ne[0], 1, input->ne[1]);
-    return combine(ctx, build_experts(ctx, rows, bank_ids ? bank_ids : routing.ids, weights), routing.weights);
+    ggml_tensor * first = nullptr;
+    const bool record = bank_ids && ctx.region_owner;
+    auto * outputs = build_experts(ctx, rows, bank_ids ? bank_ids : routing.ids, weights, record ? &first : nullptr);
+    if (record) record_region(ctx, first, outputs, weights, bank_ids);
+    return combine(ctx, outputs, routing.weights);
 }
 
 } // namespace engine::modules

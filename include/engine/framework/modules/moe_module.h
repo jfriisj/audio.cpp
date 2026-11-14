@@ -4,7 +4,9 @@
 
 namespace engine::modules {
 
-enum class MoeScoring { Softmax, Sigmoid };
+// SelectedSoftmax ranks the raw router logits (+ selection bias) and weighs the
+// selected experts by the softmax of their logits (top-k first, then softmax).
+enum class MoeScoring { Softmax, Sigmoid, SelectedSoftmax };
 enum class MoeNormalization { None, Divide, Clamp, AddEpsilon };
 enum class MoeActivation { SwiGlu, ReluSquared };
 
@@ -54,7 +56,7 @@ public:
     // bank_ids index the supplied bank: logical IDs for resident weights, slot
     // IDs for staged weights. This never changes MoeRouting logical IDs.
     ggml_tensor * build_experts(core::ModuleBuildContext & ctx, ggml_tensor * input,
-        ggml_tensor * bank_ids, const MoeExpertWeights & weights) const;
+        ggml_tensor * bank_ids, const MoeExpertWeights & weights, ggml_tensor ** first_op = nullptr) const;
     static ggml_tensor * combine(core::ModuleBuildContext & ctx, ggml_tensor * outputs,
         ggml_tensor * routing_weights);
     // Explicit bank IDs allow a scheduler to stage a small routed batch inside
@@ -62,6 +64,8 @@ public:
     ggml_tensor * build(core::ModuleBuildContext & ctx, ggml_tensor * input,
         const MoeRouting & routing, const MoeExpertWeights & weights, ggml_tensor * bank_ids = nullptr) const;
 private:
+    void record_region(core::ModuleBuildContext & ctx, ggml_tensor * first, ggml_tensor * output,
+        const MoeExpertWeights & weights, ggml_tensor * bank_ids) const;
     MoeExpertConfig experts_;
 };
 
