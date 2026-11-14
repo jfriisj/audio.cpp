@@ -80,6 +80,7 @@ struct ServerConfig {
     bool ui_requested = false;
     bool ui_management = false;
     std::filesystem::path generation_dir; // empty disables the optional queue
+    std::optional<std::filesystem::path> models_root;
     engine::core::BackendType backend = engine::core::BackendType::Cuda;
     std::string backend_impl;
     int device = 0;
