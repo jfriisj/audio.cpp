@@ -80,6 +80,7 @@ export interface LoadedModel {
 }
 
 export interface ServerHealth {
+  generation_jobs?: boolean;
   status: string;
   backend: string;
   models: number;
@@ -91,3 +92,6 @@ export interface AudioOutput {
   id: string;
   url: string;
 }
+
+
+

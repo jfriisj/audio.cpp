@@ -110,8 +110,7 @@ ParallelServerState::ParallelServerState(
         const auto binary_directory = ui_resource_anchor.empty()
             ? request_base_
             : std::filesystem::absolute(ui_resource_anchor).lexically_normal();
-        default_models_root_ = std::filesystem::absolute(
-            config_.models_root.value_or(binary_directory / "models")).lexically_normal();
+        default_models_root_ = (binary_directory / "models").lexically_normal();
         models_root_ = default_models_root_;
         request_base_ = binary_directory;
         std::filesystem::create_directories(models_root_);
@@ -134,12 +133,28 @@ ParallelServerState::ParallelServerState(
     }
     register_static_server_frontends(frontends_);
     load_models();
+    if (config_.ui_enabled && !config_.generation_dir.empty()) {
+        generation_jobs_ = std::make_unique<GenerationJobs>(
+        request_base_ / config_.generation_dir,
+        [this](const std::string &body) {
+            const auto input = engine::io::json::parse(body);
+            if (const auto *model_load = input.find("model_load")) {
+                if (!config_.ui_management) {
+                    return error_response(403, "model loading is disabled", "forbidden");
+                }
+                const auto loaded = handle_model_load(engine::io::json::stringify(*model_load));
+                if (loaded.status != 200) return loaded;
+            }
+            return handle_generic_run(body);
+        });
+    }
     if (config_.idle_unload_ms > 0) {
         idle_unload_thread_ = std::thread(&ParallelServerState::idle_unload_loop, this);
     }
 }
 
 ParallelServerState::~ParallelServerState() {
+    generation_jobs_.reset();
     idle_unload_shutdown_.store(true, std::memory_order_relaxed);
     if (idle_unload_thread_.joinable()) {
         idle_unload_thread_.join();
@@ -194,6 +209,7 @@ HttpResponse ParallelServerState::handle_health() const {
         "\",\"models\":" + std::to_string(model_count) +
         ",\"ui\":" + (config_.ui_enabled ? "true" : "false") +
         ",\"ui_management\":" + (config_.ui_management ? "true" : "false") +
+        ",\"generation_jobs\":" + (generation_jobs_ ? "true" : "false") +
         ",\"version\":" + json_quote(minitts::app::build_version()) +
         ",\"git\":" + json_quote(minitts::app::build_git_sha()) +
         ",\"git_date\":" + json_quote(minitts::app::build_git_date()) + "}");
@@ -945,7 +961,7 @@ ParallelServerState::TimedTaskResult ParallelServerState::run_streaming_model_im
     const minitts::app::AudioChunkStream * audio,
     const std::function<void(const engine::runtime::StreamEvent &)> & event_sink,
     std::optional<int> busy_timeout_ms,
-    RequestLease request_lease, bool include_artifacts) {
+    RequestLease request_lease) {
     std::optional<ModelSlots::Lock> lock;
     if (!request_lease) { lock.emplace(acquire_model_run(model, busy_timeout_ms)); }
     const size_t slot = request_lease ? request_lease->slot() : lock->slot();
@@ -961,7 +977,7 @@ ParallelServerState::TimedTaskResult ParallelServerState::run_streaming_model_im
     const bool diarization = model.task.task == engine::runtime::VoiceTaskKind::Diarization;
     const auto sink = [&](const engine::runtime::StreamEvent & event) {
         if (!timed_result.ttft_ms.has_value() &&
-            (stream_event_has_output(event, include_artifacts) || (diarization && !event.speaker_turns.empty()))) {
+            (stream_event_has_output(event) || (diarization && !event.speaker_turns.empty()))) {
             timed_result.ttft_ms = elapsed_ms(started);
         }
         if (event_sink) {
@@ -989,8 +1005,8 @@ ParallelServerState::TimedTaskResult ParallelServerState::run_streaming_model(
     const engine::runtime::TaskRequest & request,
     const std::function<void(const engine::runtime::StreamEvent &)> & event_sink,
     std::optional<int> busy_timeout_ms,
-    RequestLease request_lease, bool include_artifacts) {
-    return run_streaming_model_impl(model, request, nullptr, event_sink, busy_timeout_ms, std::move(request_lease), include_artifacts);
+    RequestLease request_lease) {
+    return run_streaming_model_impl(model, request, nullptr, event_sink, busy_timeout_ms, std::move(request_lease));
 }
 
 ParallelServerState::TimedTaskResult ParallelServerState::run_streaming_model_from(
@@ -2142,6 +2158,12 @@ engine::runtime::TaskRequest parallel_drop_unsupported_language_option(
     return request;
 }
 
+HttpResponse ParallelServerState::handle_generation_jobs(const HttpRequest &request) {
+    if (!config_.ui_enabled) return error_response(403, "WebUI is disabled", "forbidden");
+    if (!generation_jobs_) return error_response(404, "generation jobs are disabled", "not_found");
+    return generation_jobs_->handle(request);
+}
+
 HttpResponse ParallelServerState::handle_generic_run(const std::string & body_text) {
     const auto body = engine::io::json::parse(body_text);
     auto & model = require_model(body);
@@ -2298,7 +2320,6 @@ HttpResponse ParallelServerState::handle_generic_stream(const std::string & body
     const auto body = engine::io::json::parse(body_text);
     auto & model = require_model(body);
     const bool sse = task_stream_sse_requested(body);
-    const bool include_artifacts = bool_field(body, "include_artifacts", false);
     const auto busy_timeout_ms = parse_busy_timeout_override(body);
     auto request_lease = bind_request(model, busy_timeout_ms);
     const auto * request_json = body.find("request");
@@ -2320,15 +2341,15 @@ HttpResponse ParallelServerState::handle_generic_stream(const std::string & body
         // response puts in "events", and the result follows as the object it
         // puts under "result". The lease is bound above, before the headers,
         // so a busy model is still a 503 here.
-        return sse_response([this, model_ptr, request = std::move(request), busy_timeout_ms, diarization, include_artifacts,
+        return sse_response([this, model_ptr, request = std::move(request), busy_timeout_ms, diarization,
                              request_lease](HttpStreamWriter & writer) {
             const auto timed_result = run_streaming_model(
                 *model_ptr,
                 request,
                 [&](const engine::runtime::StreamEvent & event) {
-                    write_sse(writer, task_stream_event_line(stream_event_json(event, diarization, include_artifacts)));
+                    write_sse(writer, task_stream_event_line(stream_event_json(event, diarization)));
                 },
-                busy_timeout_ms, request_lease, include_artifacts);
+                busy_timeout_ms, request_lease);
             const bool silent_diarization = diarization && !timed_result.ttft_ms.has_value();
             write_sse(writer, task_stream_done_line(
                                   silent_diarization
@@ -2344,7 +2365,7 @@ HttpResponse ParallelServerState::handle_generic_stream(const std::string & body
         [&](const engine::runtime::StreamEvent & event) {
             events.push_back(event);
         },
-        busy_timeout_ms, request_lease, include_artifacts);
+        busy_timeout_ms, request_lease);
     std::ostringstream out;
     std::shared_lock<std::shared_mutex> metadata_lock(model.metadata_mutex);
     const bool diarization = model.task.task == engine::runtime::VoiceTaskKind::Diarization;
@@ -2353,7 +2374,7 @@ HttpResponse ParallelServerState::handle_generic_stream(const std::string & body
         if (i != 0) {
             out << ",";
         }
-        out << stream_event_json(events[i], diarization, include_artifacts);
+        out << stream_event_json(events[i], diarization);
     }
     const bool silent_diarization = diarization && !timed_result.ttft_ms.has_value();
     out << "],\"result\":" << (silent_diarization

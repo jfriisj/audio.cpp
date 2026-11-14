@@ -92,6 +92,7 @@ void print_help() {
         << "                [--device <id>] [--list-devices [--json]] [--threads <n>] [--busy-timeout-ms <ms>]\n"
         << "                [--max-loaded-models <n>] [--idle-unload-ms <ms>] [--min-free-memory-mb <mb>]\n"
         << "                [--model-spec-override <json-or-directory|embedded>] [--voice-dir <directory>]\n"
+        << "                [--generation-dir <directory>]\n"
         << "                [--frontend-listener <name>] [--frontend-option key=value]\n"
         << "                [--log] [--log-file <path>] [--load-progress 0|1]\n"
         << "                [--cors-origins <origins>] [--resample-kernel-cache-mb <mb>]\n"
@@ -101,10 +102,9 @@ void print_help() {
         << "  --no-ui                          disable the embedded WebUI\n"
         << "  --ui-management                  allow WebUI model management and downloads; requires\n"
         << "                                   AUDIOCPP_BUILD_NATIVE_MODEL_MANAGER=ON at build time\n"
-        << "  --models-root <directory>         default WebUI models folder; overrides config models_root\n"
         << "  --host <ip>                      server bind address; default 127.0.0.1\n"
         << "  --port <port>                    server listening port; default 8080\n"
-        << "  --backend cpu|cuda|hip|rocm|vulkan|metal|webgpu|sycl  default cuda (rocm is an alias for hip)\n"
+        << "  --backend cpu|cuda|hip|rocm|vulkan|metal  default cuda (rocm is an alias for hip)\n"
         << "  --backend-impl <name>             optional backend implementation; default preserves existing dispatch\n"
         << "  --list-devices                   list available backend devices and exit; add --json\n"
         << "                                   for PCI ids and free/total memory as JSON\n"
@@ -123,6 +123,7 @@ void print_help() {
         << "                                   evicting the least recently used; default 32, 0 disables;\n"
         << "                                   a kernel larger than this is rebuilt on every call\n"
         << "  --voice-dir <directory>          override the shared reference voice library directory\n"
+        << "  --generation-dir <directory>     enable durable background music jobs and WAV library\n"
         << "  --frontend-listener <name>       opt-in frontend transport listener, e.g. https or websocket\n"
         << "  --frontend-option key=value      listener-specific option; may be repeated\n"
         << "  --cors-origins \"*\"              experimental; disabled by default. Allows browser\n"
@@ -144,7 +145,7 @@ void print_help() {
         << "  POST /v1/ui/models/install/stop  stop one active package download\n"
         << "  POST /v1/ui/models/clean-partial remove abandoned package staging files\n"
         << "  POST /v1/ui/models/delete        remove one installed package precision\n"
-        << "  GET  /v1/ui/models-root          current and default models folders\n"
+        << "  GET  /v1/ui/models-root          current and binary-local default models folders\n"
         << "  POST /v1/ui/models-root          select a models folder (empty path restores default)\n"
         << "  POST /v1/ui/browse-directories   list local folders for the native folder picker\n"
         << "  GET  /v1/ui/models/install-status[?id=<package>]\n"
@@ -163,6 +164,11 @@ void print_help() {
         << "       OpenAI-style streaming: speech stream_format=sse|audio, transcription stream=true\n"
         << "  POST /v1/audio/transcriptions/live?model=<id>\n"
         << "       raw PCM in a chunked body, transcript deltas as SSE on the same connection\n"
+        << "  POST /v1/tasks/jobs              enqueue background music generation (HTTP 202)\n"
+        << "  GET  /v1/tasks/jobs              list persistent generations\n"
+        << "  GET  /v1/tasks/jobs/<id>         get generation state\n"
+        << "  POST /v1/tasks/jobs/<id>/retry  retry failed/interrupted generation\n"
+        << "  GET  /v1/tasks/jobs/<id>/audio/<index>  WAV output\n"
         << "  POST /v1/tasks/run\n"
         << "  POST /v1/tasks/batch\n"
         << "  POST /v1/tasks/stream\n"
@@ -240,13 +246,6 @@ int main(int argc, char ** argv) {
         if (has_arg(argc, argv, "--ui-management")) {
             config.ui_management = true;
         }
-        if (has_arg(argc, argv, "--models-root")) {
-            const auto models_root = arg_value(argc, argv, "--models-root");
-            if (!models_root || models_root->empty() || models_root->rfind("--", 0) == 0) {
-                throw std::runtime_error("--models-root requires a non-empty directory");
-            }
-            config.models_root = std::filesystem::path(*models_root);
-        }
 #if !defined(AUDIOCPP_HAS_NATIVE_MODEL_MANAGER)
         if (config.ui_management) {
             throw std::runtime_error(
@@ -277,6 +276,9 @@ int main(int argc, char ** argv) {
         }
         if (const auto busy_timeout = arg_value(argc, argv, "--busy-timeout-ms")) {
             config.busy_timeout_ms = std::stoi(*busy_timeout);
+        }
+        if (const auto generation_dir = arg_value(argc, argv, "--generation-dir")) {
+            config.generation_dir = *generation_dir;
         }
         if (const auto max_loaded_models = arg_value(argc, argv, "--max-loaded-models")) {
             config.max_loaded_models = std::stoi(*max_loaded_models);

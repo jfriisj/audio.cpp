@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model_slots.h"
+#include "generation_jobs.h"
 #include "config.h"
 #include "frontend.h"
 #include "http.h"
@@ -184,8 +185,7 @@ private:
         const engine::runtime::TaskRequest & request,
         const std::function<void(const engine::runtime::StreamEvent &)> & event_sink = {},
         std::optional<int> busy_timeout_ms = std::nullopt,
-        RequestLease request_lease = {},
-        bool include_artifacts = false);
+        RequestLease request_lease = {});
     // Shared body of the two entry points above/below; `audio` selects the source.
     TimedTaskResult run_streaming_model_impl(
         LoadedModel & model,
@@ -193,8 +193,7 @@ private:
         const minitts::app::AudioChunkStream * audio,
         const std::function<void(const engine::runtime::StreamEvent &)> & event_sink,
         std::optional<int> busy_timeout_ms,
-        RequestLease request_lease = {},
-        bool include_artifacts = false);
+        RequestLease request_lease = {});
     // Same as run_streaming_model, but pulls audio from `audio` instead of
     // `request.audio_input`, so the samples are never fully materialized.
     TimedTaskResult run_streaming_model_from(
@@ -240,6 +239,7 @@ private:
         RequestLease request_lease = {});
     HttpResponse handle_transcription_live(const HttpRequest & request);
     HttpResponse handle_generic_run(const std::string & body_text);
+    HttpResponse handle_generation_jobs(const HttpRequest & request);
     HttpResponse handle_generic_batch(const std::string & body_text);
     HttpResponse handle_generic_stream(const std::string & body_text);
     HttpResponse handle_voices(const HttpRequest & request) const;
@@ -267,6 +267,7 @@ private:
     // Publish a bulk operation's per-model barriers as one short transaction.
     // Released before any waiting, unloading, or inference.
     std::mutex bulk_admission_mutex_;
+    std::unique_ptr<GenerationJobs> generation_jobs_;
     std::filesystem::path upload_root_;
     std::mutex upload_root_mutex_;
     std::filesystem::path repository_root_;

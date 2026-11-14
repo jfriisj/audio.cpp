@@ -21,3 +21,10 @@ target_proj/
 model_specs_v1/
 *.md
 *.wav
+
+# UI is rebuilt from source in the Node build stage
+webui/native/node_modules/
+webui/native/.svelte-kit/
+webui/native/dist/
+output/
+.env
